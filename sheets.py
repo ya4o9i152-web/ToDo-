@@ -9,7 +9,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
-HEADERS = ["id", "タイトル", "内容", "期日", "完了", "作成日時"]
+HEADERS = ["id", "タイトル", "内容", "期日", "完了", "作成日時", "優先度", "タグ"]
 
 
 class SheetsManager:
@@ -22,8 +22,14 @@ class SheetsManager:
         self._ensure_headers()
 
     def _ensure_headers(self):
-        if not self.sheet.row_values(1):
+        existing = self.sheet.row_values(1)
+        if not existing:
             self.sheet.append_row(HEADERS)
+            return
+        for col in ["優先度", "タグ"]:
+            if col not in existing:
+                self.sheet.update_cell(1, len(existing) + 1, col)
+                existing.append(col)
 
     def get_all_tasks(self) -> pd.DataFrame:
         records = self.sheet.get_all_records()
@@ -32,9 +38,13 @@ class SheetsManager:
         df = pd.DataFrame(records)
         df["完了"] = df["完了"].map(lambda x: str(x).upper() == "TRUE")
         df["期日"] = pd.to_datetime(df["期日"], errors="coerce")
+        if "優先度" not in df.columns:
+            df["優先度"] = ""
+        if "タグ" not in df.columns:
+            df["タグ"] = ""
         return df
 
-    def add_task(self, title: str, content: str, due_date) -> None:
+    def add_task(self, title: str, content: str, due_date, priority: str = "", tags: str = "") -> None:
         row = [
             str(uuid.uuid4())[:8],
             title,
@@ -42,6 +52,8 @@ class SheetsManager:
             due_date.strftime("%Y-%m-%d") if due_date else "",
             "FALSE",
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            priority,
+            tags,
         ]
         self.sheet.append_row(row)
 
@@ -52,13 +64,14 @@ class SheetsManager:
                 return i + 1
         return -1
 
-    def update_task(self, task_id: str, title: str, content: str, due_date) -> None:
+    def update_task(self, task_id: str, title: str, content: str, due_date, priority: str = "", tags: str = "") -> None:
         row = self._find_row(task_id)
         if row > 0:
             self.sheet.update(
                 f"B{row}:D{row}",
                 [[title, content, due_date.strftime("%Y-%m-%d") if due_date else ""]],
             )
+            self.sheet.update(f"G{row}:H{row}", [[priority, tags]])
 
     def toggle_complete(self, task_id: str, completed: bool) -> None:
         row = self._find_row(task_id)
