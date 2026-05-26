@@ -28,12 +28,27 @@ if not check_password():
 
 st.markdown("""
 <style>
-div[data-testid="stHorizontalBlock"] > div { padding: 1px !important; }
+/* モバイルでカラムが縦積みにならないよう固定 */
+div[data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    overflow-x: hidden;
+}
+div[data-testid="stHorizontalBlock"] > div {
+    padding: 1px !important;
+    min-width: 0 !important;
+    flex-shrink: 1 !important;
+    overflow: hidden;
+}
 div[data-testid="stHorizontalBlock"] button {
-    font-size: 13px !important;
-    padding: 6px 2px !important;
-    min-height: 48px !important;
-    line-height: 1.4;
+    font-size: 12px !important;
+    padding: 4px 1px !important;
+    min-height: 40px !important;
+    line-height: 1.3 !important;
+    white-space: pre-wrap !important;
+}
+button p {
+    font-size: 12px !important;
+    line-height: 1.3 !important;
 }
 .task-card {
     border-radius: 8px;
@@ -319,6 +334,7 @@ def _build_line_message(tasks_df: pd.DataFrame, today: date) -> str:
         & (tasks_df["期日"].dt.date < today)
     ]
 
+    app_url = st.secrets.get("app_url", "")
     lines = ["📋 タスクリマインダー\n"]
 
     if not upcoming.empty:
@@ -336,6 +352,9 @@ def _build_line_message(tasks_df: pd.DataFrame, today: date) -> str:
             d = t["期日"].date()
             diff = (today - d).days
             lines.append(f"  ・{t['タイトル']}（{diff}日超過）")
+
+    if app_url:
+        lines.append(f"\n📲 アプリを開く\n{app_url}")
 
     return "\n".join(lines)
 
@@ -471,31 +490,28 @@ def main():
     view = st.session_state.get("view_mode", "📅 カレンダー")
 
     if view == "📅 カレンダー":
-        col_cal, col_tasks = st.columns([1, 1])
+        st.subheader("カレンダー")
+        render_calendar(df)
+        if st.button("📍 今月に戻る", use_container_width=True):
+            today = date.today()
+            st.session_state.cal_year = today.year
+            st.session_state.cal_month = today.month
+            st.session_state.selected_date = today
+            st.rerun()
 
-        with col_cal:
-            st.subheader("カレンダー")
-            render_calendar(df)
-            if st.button("📍 今月に戻る", use_container_width=True):
-                today = date.today()
-                st.session_state.cal_year = today.year
-                st.session_state.cal_month = today.month
-                st.session_state.selected_date = today
-                st.rerun()
+        st.divider()
+        sel = st.session_state.selected_date
+        st.subheader(f"{sel.strftime('%Y年%-m月%-d日')} のタスク")
 
-        with col_tasks:
-            sel = st.session_state.selected_date
-            st.subheader(f"{sel.strftime('%Y年%-m月%-d日')} のタスク")
+        day_tasks = df[
+            df["期日"].notna() & (df["期日"].dt.date == sel)
+        ] if not df.empty else pd.DataFrame()
 
-            day_tasks = df[
-                df["期日"].notna() & (df["期日"].dt.date == sel)
-            ] if not df.empty else pd.DataFrame()
-
-            if day_tasks.empty:
-                st.info("この日のタスクはありません。サイドバーから追加できます。")
-            else:
-                for _, task in day_tasks.iterrows():
-                    render_task_card(task, sm)
+        if day_tasks.empty:
+            st.info("この日のタスクはありません。サイドバーから追加できます。")
+        else:
+            for _, task in day_tasks.iterrows():
+                render_task_card(task, sm)
 
     else:
         st.subheader("📋 全タスク一覧")
